@@ -1,0 +1,233 @@
+-------------------------------------------------------------------------------
+-- Techstack Enforcer - Main CLI Entry Point
+-- Command-line interface for checking and enforcing techstack rules
+-------------------------------------------------------------------------------
+
+with Ada.Text_IO;           use Ada.Text_IO;
+with Ada.Command_Line;      use Ada.Command_Line;
+with Ada.Strings.Fixed;     use Ada.Strings.Fixed;
+with Techstack_Enforcer;
+with Techstack_Types;       use Techstack_Types;
+with Techstack_Notify;
+
+procedure Techstack_Main is
+
+   procedure Print_Usage is
+   begin
+      Put_Line ("Techstack Enforcer - Technology Stack Filter");
+      Put_Line ("Usage: techstack-enforcer <command> [options]");
+      New_Line;
+      Put_Line ("Commands:");
+      Put_Line ("  check <path>      Check a file or directory");
+      Put_Line ("  audit <path>      Full repository audit");
+      Put_Line ("  list              List all filters");
+      Put_Line ("  add <pattern>     Add a filter interactively");
+      Put_Line ("  init              Initialize with default filters");
+      Put_Line ("  version           Show version information");
+      New_Line;
+      Put_Line ("Options:");
+      Put_Line ("  --mode=<mode>     Set mode: learning, warn, enforce, lockdown");
+      Put_Line ("  --config=<file>   Use specific config file");
+      Put_Line ("  --fatal-exit      Exit with code 1 on any fatal violation");
+      Put_Line ("  --notify          Send desktop notifications");
+      Put_Line ("  --json            Output in JSON format");
+   end Print_Usage;
+
+   procedure Print_Version is
+   begin
+      Put_Line ("Techstack Enforcer v1.0.0");
+      Put_Line ("Built with Ada/SPARK for formal verification");
+      Put_Line ("(c) 2024 - Memory-safe technology enforcement");
+   end Print_Version;
+
+   procedure Do_Check (Path : String; Notify : Boolean) is
+      P : Path_String := (others => ' ');
+      P_Len : constant Natural := Natural'Min (Path'Length, Max_Path_Length);
+      Result : Techstack_Enforcer.Check_Result;
+   begin
+      P (1 .. P_Len) := Path (Path'First .. Path'First + P_Len - 1);
+      Techstack_Enforcer.Check_File (P, P_Len, Result);
+
+      if Result.Blocked then
+         Put ("BLOCKED: ");
+         Put (Trim (Result.Pattern (1 .. Result.Pattern_Len), Ada.Strings.Both));
+         Put (" - ");
+         Put_Line (Trim (Result.Reason (1 .. Result.Reason_Len), Ada.Strings.Both));
+
+         if Notify then
+            Techstack_Notify.Send_Violation
+              (Path,
+               Trim (Result.Pattern (1 .. Result.Pattern_Len), Ada.Strings.Both),
+               Trim (Result.Reason (1 .. Result.Reason_Len), Ada.Strings.Both),
+               Result.Level);
+         end if;
+
+         Set_Exit_Status (Failure);
+      else
+         Put_Line ("OK: " & Path);
+      end if;
+   end Do_Check;
+
+   procedure Do_Audit (Path : String; Notify : Boolean; Fatal_Exit : Boolean) is
+      Total, Violations, Fatals : Natural;
+      Success : Boolean;
+   begin
+      Put_Line ("Scanning: " & Path);
+      Put_Line ("----------------------------------------");
+
+      Techstack_Enforcer.Check_Repository (Path, Total, Violations, Fatals, Success);
+
+      if Success then
+         Put_Line ("Files scanned:  " & Natural'Image (Total));
+         Put_Line ("Violations:     " & Natural'Image (Violations));
+         Put_Line ("Fatal blocks:   " & Natural'Image (Fatals));
+         New_Line;
+
+         if Violations = 0 then
+            Put_Line ("PASS: Repository complies with techstack policy");
+         else
+            Put_Line ("FAIL: Repository has techstack violations");
+
+            if Notify then
+               Techstack_Notify.Send_Audit_Summary
+                 (Path, Total, Violations, Fatals);
+            end if;
+
+            if Fatal_Exit and Fatals > 0 then
+               Set_Exit_Status (Failure);
+            end if;
+         end if;
+      else
+         Put_Line ("ERROR: Could not scan repository");
+         Set_Exit_Status (Failure);
+      end if;
+   end Do_Audit;
+
+   procedure Do_List is
+      Count : constant Natural := Techstack_Enforcer.Get_Filter_Count;
+   begin
+      Put_Line ("Techstack Filter List (" & Natural'Image (Count) & " entries)");
+      Put_Line ("----------------------------------------");
+
+      for I in 1 .. Count loop
+         declare
+            E : constant Filter_Entry := Techstack_Enforcer.Get_Filter (I);
+            Level_Str : String (1 .. 5);
+            Enable_Str : constant String := (if E.Enabled then "  " else "X ");
+         begin
+            case E.Level is
+               when Allow => Level_Str := "ALLOW";
+               when Warn  => Level_Str := "WARN ";
+               when Block => Level_Str := "BLOCK";
+               when Fatal => Level_Str := "FATAL";
+            end case;
+
+            Put (Enable_Str);
+            Put ("[" & Level_Str & "] ");
+            Put (Head (Trim (E.Pattern (1 .. E.Pattern_Len), Ada.Strings.Both), 30));
+            Put (" | ");
+            Put_Line (Trim (E.Reason (1 .. E.Reason_Len), Ada.Strings.Both));
+         end;
+      end loop;
+   end Do_List;
+
+   --  Parsed arguments
+   Cmd         : String (1 .. 20) := (others => ' ');
+   Cmd_Len     : Natural := 0;
+   Target_Path : String (1 .. 1024) := (others => ' ');
+   Path_Len    : Natural := 0;
+   Notify_Flag : Boolean := False;
+   Fatal_Exit  : Boolean := False;
+
+begin
+   --  Initialize enforcer
+   Techstack_Enforcer.Initialize;
+
+   --  Parse arguments
+   if Argument_Count = 0 then
+      Print_Usage;
+      return;
+   end if;
+
+   --  Get command
+   declare
+      Arg1 : constant String := Argument (1);
+   begin
+      Cmd_Len := Natural'Min (Arg1'Length, 20);
+      Cmd (1 .. Cmd_Len) := Arg1 (Arg1'First .. Arg1'First + Cmd_Len - 1);
+   end;
+
+   --  Parse remaining arguments
+   for I in 2 .. Argument_Count loop
+      declare
+         Arg : constant String := Argument (I);
+      begin
+         if Arg'Length > 9 and then Arg (Arg'First .. Arg'First + 6) = "--mode=" then
+            declare
+               Mode_Str : constant String := Arg (Arg'First + 7 .. Arg'Last);
+            begin
+               if Mode_Str = "learning" then
+                  Techstack_Enforcer.Set_Mode (Learning);
+               elsif Mode_Str = "warn" then
+                  Techstack_Enforcer.Set_Mode (Warn_Only);
+               elsif Mode_Str = "enforce" then
+                  Techstack_Enforcer.Set_Mode (Enforce);
+               elsif Mode_Str = "lockdown" then
+                  Techstack_Enforcer.Set_Mode (Lockdown);
+               end if;
+            end;
+         elsif Arg = "--notify" then
+            Notify_Flag := True;
+         elsif Arg = "--fatal-exit" then
+            Fatal_Exit := True;
+         elsif Arg (Arg'First) /= '-' then
+            Path_Len := Natural'Min (Arg'Length, 1024);
+            Target_Path (1 .. Path_Len) := Arg (Arg'First .. Arg'First + Path_Len - 1);
+         end if;
+      end;
+   end loop;
+
+   --  Execute command
+   declare
+      Command : constant String := Trim (Cmd (1 .. Cmd_Len), Ada.Strings.Both);
+   begin
+      if Command = "check" then
+         if Path_Len > 0 then
+            Do_Check (Target_Path (1 .. Path_Len), Notify_Flag);
+         else
+            Put_Line ("Error: check requires a path argument");
+            Set_Exit_Status (Failure);
+         end if;
+
+      elsif Command = "audit" then
+         if Path_Len > 0 then
+            Do_Audit (Target_Path (1 .. Path_Len), Notify_Flag, Fatal_Exit);
+         else
+            Do_Audit (".", Notify_Flag, Fatal_Exit);
+         end if;
+
+      elsif Command = "list" then
+         Do_List;
+
+      elsif Command = "init" then
+         Put_Line ("Initialized with default filters");
+         Do_List;
+
+      elsif Command = "version" or Command = "-v" or Command = "--version" then
+         Print_Version;
+
+      elsif Command = "help" or Command = "-h" or Command = "--help" then
+         Print_Usage;
+
+      else
+         Put_Line ("Unknown command: " & Command);
+         Print_Usage;
+         Set_Exit_Status (Failure);
+      end if;
+   end;
+
+exception
+   when others =>
+      Put_Line ("Error: Unexpected exception");
+      Set_Exit_Status (Failure);
+end Techstack_Main;
