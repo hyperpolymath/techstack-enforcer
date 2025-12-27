@@ -10,6 +10,7 @@ with Techstack_Enforcer;
 with Techstack_Types;       use Techstack_Types;
 with Techstack_Notify;
 with Techstack_JSON_IO;
+with Techstack_DefSets;
 
 procedure Techstack_Main is
 
@@ -24,16 +25,26 @@ procedure Techstack_Main is
       Put_Line ("  decide [<path>]   Output allow/deny decision as JSON");
       Put_Line ("                    Reads paths from stdin if no path given");
       Put_Line ("  list              List all filters");
+      Put_Line ("  defsets           List available definition sets");
       Put_Line ("  add <pattern>     Add a filter interactively");
       Put_Line ("  init              Initialize with default filters");
       Put_Line ("  version           Show version information");
       New_Line;
       Put_Line ("Options:");
+      Put_Line ("  --defset=<name>   Use definition set: strict, moderate, permissive,");
+      Put_Line ("                    enterprise, memory_safe");
       Put_Line ("  --mode=<mode>     Set mode: learning, warn, enforce, lockdown");
       Put_Line ("  --config=<file>   Use specific config file");
       Put_Line ("  --fatal-exit      Exit with code 1 on any fatal violation");
       Put_Line ("  --notify          Send desktop notifications");
       Put_Line ("  --json            Output in JSON format");
+      New_Line;
+      Put_Line ("Definition Sets:");
+      Put_Line ("  strict       Maximum memory safety - blocks all unsafe languages");
+      Put_Line ("  moderate     Balanced safety with practical exceptions");
+      Put_Line ("  permissive   Advisory mode - warns but rarely blocks");
+      Put_Line ("  enterprise   Corporate environments with legacy support");
+      Put_Line ("  memory_safe  Focus on memory safety - blocks C/C++/Assembly");
       New_Line;
       Put_Line ("Input Format (for decide command with stdin):");
       Put_Line ("  One file path per line");
@@ -180,9 +191,13 @@ procedure Techstack_Main is
    Path_Len    : Natural := 0;
    Notify_Flag : Boolean := False;
    Fatal_Exit  : Boolean := False;
+   DefSet_Name : String (1 .. 32) := (others => ' ');
+   DefSet_Len  : Natural := 0;
+   DefSet_ID   : Techstack_DefSets.DefSet_ID := Techstack_DefSets.Custom;
+   DefSet_Used : Boolean := False;
 
 begin
-   --  Initialize enforcer
+   --  Initialize enforcer (will be re-initialized if defset is specified)
    Techstack_Enforcer.Initialize;
 
    --  Parse arguments
@@ -204,7 +219,17 @@ begin
       declare
          Arg : constant String := Argument (I);
       begin
-         if Arg'Length > 9 and then Arg (Arg'First .. Arg'First + 6) = "--mode=" then
+         if Arg'Length > 9 and then Arg (Arg'First .. Arg'First + 8) = "--defset=" then
+            --  Parse definition set name
+            declare
+               Set_Str : constant String := Arg (Arg'First + 9 .. Arg'Last);
+            begin
+               DefSet_Len := Natural'Min (Set_Str'Length, 32);
+               DefSet_Name (1 .. DefSet_Len) := Set_Str (Set_Str'First .. Set_Str'First + DefSet_Len - 1);
+               DefSet_ID := Techstack_DefSets.Parse_DefSet_Name (Set_Str);
+               DefSet_Used := True;
+            end;
+         elsif Arg'Length > 9 and then Arg (Arg'First .. Arg'First + 6) = "--mode=" then
             declare
                Mode_Str : constant String := Arg (Arg'First + 7 .. Arg'Last);
             begin
@@ -228,6 +253,21 @@ begin
          end if;
       end;
    end loop;
+
+   --  Load definition set if specified
+   if DefSet_Used then
+      declare
+         Success : Boolean;
+      begin
+         Techstack_DefSets.Load_DefSet (DefSet_ID, Success);
+         if not Success then
+            Put_Line ("Error: Failed to load definition set: " &
+                      Trim (DefSet_Name (1 .. DefSet_Len), Ada.Strings.Both));
+            Set_Exit_Status (Failure);
+            return;
+         end if;
+      end;
+   end if;
 
    --  Execute command
    declare
@@ -260,6 +300,10 @@ begin
 
       elsif Command = "list" then
          Do_List;
+
+      elsif Command = "defsets" then
+         --  List available definition sets
+         Techstack_DefSets.List_DefSets;
 
       elsif Command = "init" then
          Put_Line ("Initialized with default filters");
