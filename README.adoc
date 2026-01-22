@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PMPL-1.0-or-later
 
 = Techstack Filterlist
 :toc: macro
@@ -51,7 +51,7 @@ Create `.techstack/filterlist.scm` in your repo:
 [source,yaml]
 ----
 # .github/workflows/techstack-check.yml
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PMPL-1.0-or-later
 name: Techstack Policy
 on: [push, pull_request]
 permissions: read-all
@@ -228,4 +228,4 @@ link:https://github.com/hyperpolymath/rhodibot[Rhodibot] uses Techstack Filterli
 
 == License
 
-AGPL-3.0-or-later. See link:LICENSE.txt[LICENSE.txt] for details.
+PMPL-1.0-or-later. See link:LICENSE.txt[LICENSE.txt] for details.
