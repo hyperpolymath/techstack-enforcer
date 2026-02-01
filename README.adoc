@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0-or-later
 
 = Techstack Filterlist
 :toc: macro
@@ -8,6 +8,12 @@
 Declarative tech stack policy enforcement for repositories.
 
 image:https://img.shields.io/github/license/hyperpolymath/techstack-filterlist[License]
+
+== License & Philosophy
+
+This project must declare **MPL-2.0-or-later** for platform/tooling compatibility.
+
+Philosophy: **Palimpsest**. The Palimpsest-MPL (PMPL) text is provided in `license/PMPL-1.0.txt`, and the canonical source is the palimpsest-license repository.
 
 toc::[]
 
@@ -51,7 +57,7 @@ Create `.techstack/filterlist.scm` in your repo:
 [source,yaml]
 ----
 # .github/workflows/techstack-check.yml
-# SPDX-License-Identifier: PMPL-1.0-or-later
+# SPDX-License-Identifier: MPL-2.0-or-later
 name: Techstack Policy
 on: [push, pull_request]
 permissions: read-all

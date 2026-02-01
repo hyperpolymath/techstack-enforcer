@@ -1,8 +1,7 @@
 # Techstack Enforcer
 
-image:[License,link="https://github.com/hyperpolymath/palimpsest-license"]
-
-// SPDX-License-Identifier: PMPL-1.0
+image:https://img.shields.io/badge/License-MPL_2.0-blue.svg[MPL-2.0-or-later,link="https://opensource.org/licenses/MPL-2.0"]
+// SPDX-License-Identifier: MPL-2.0-or-later
 // SPDX-FileCopyrightText: 2025 Jonathan D.A. Jewell
 
 A formally verified technology stack filter list enforcement system written in Ada/SPARK.
